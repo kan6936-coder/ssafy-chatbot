@@ -3,6 +3,7 @@ import json
 import streamlit as st
 from openai import OpenAI
 import feedparser
+from urllib.parse import quote
 
 MEMORY_FILE = "conversation.json"
 API_KEY = os.environ.get("OPENAI_API_KEY")
@@ -38,8 +39,16 @@ def is_news_request(user_input: str) -> bool:
 
 def search_news(query):
     try:
-        url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
+        encoded_query = quote(query)
+        url = "https://news.google.com/rss/search?q=" + encoded_query + "&hl=ko&gl=KR&ceid=KR:ko"
+        st.write("[DEBUG] 검색 URL: " + url)
+        
         feed = feedparser.parse(url)
+        st.write("[DEBUG] 피드 상태: " + str(feed.status))
+        
+        if not feed.entries:
+            return None
+        
         articles = []
         for entry in feed.entries[:3]:
             title = entry.get("title", "")
@@ -48,8 +57,8 @@ def search_news(query):
             summary = summary.replace("<b>", "").replace("</b>", "").replace("<br>", " ")[:250]
             articles.append({"title": title, "link": link, "summary": summary})
         return articles
-    except:
-        return []
+    except Exception as e:
+        return None
 
 def get_summary(title, text):
     try:
@@ -65,8 +74,12 @@ def get_summary(title, text):
 
 def get_news_summary(user_input):
     articles = search_news(user_input)
+    
+    if articles is None:
+        return "검색 중 오류 발생. 다시 시도해주세요."
+    
     if not articles:
-        return "검색 결과 없음"
+        return "검색 결과가 없습니다. 다른 키워드로 시도해주세요."
     
     result = ""
     for i, article in enumerate(articles, 1):
