@@ -5,6 +5,7 @@ import streamlit as st
 from openai import OpenAI
 from dotenv import load_dotenv
 from urllib.parse import quote
+from datetime import datetime
 
 # ===============================
 # 환경 설정
@@ -62,17 +63,35 @@ def summarize_article(text):
     return res.choices[0].message.content.strip()
 
 def handle_news_request(user_input, offset):
-    """기사 검색 요청 처리"""
+    """기사 검색 요청 처리 (국내 기사만, 최신순)"""
     articles = search_news(user_input, offset)
 
     if not articles:
         return "검색 결과가 없습니다.\n다른 키워드로 검색해보세요."
 
+    # 날짜 기준으로 정렬 (최신순)
+    articles_with_date = []
+    for article in articles:
+        try:
+            # published_parsed는 datetime 객체
+            if hasattr(article, 'published_parsed') and article.published_parsed:
+                pub_date = datetime(*article.published_parsed[:6])
+            else:
+                pub_date = datetime.now()
+        except:
+            pub_date = datetime.now()
+        
+        articles_with_date.append((pub_date, article))
+    
+    # 최신순으로 정렬
+    articles_with_date.sort(key=lambda x: x[0], reverse=True)
+
     response = ""
-    for idx, article in enumerate(articles, start=1):
+    for idx, (pub_date, article) in enumerate(articles_with_date, start=1):
         summary = summarize_article(article.get("summary", ""))
+        date_str = pub_date.strftime("%Y-%m-%d %H:%M")
         response += (
-            f"{idx}. {article.title}\n"
+            f"{idx}. [{date_str}] {article.title}\n"
             f"{summary}\n"
             f"🔗 {article.link}\n\n"
         )
