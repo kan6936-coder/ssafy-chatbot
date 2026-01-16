@@ -41,10 +41,8 @@ def search_news(query):
     try:
         encoded_query = quote(query)
         url = "https://news.google.com/rss/search?q=" + encoded_query + "&hl=ko&gl=KR&ceid=KR:ko"
-        st.write("[DEBUG] 검색 URL: " + url)
         
         feed = feedparser.parse(url)
-        st.write("[DEBUG] 피드 상태: " + str(feed.status))
         
         if not feed.entries:
             return None
@@ -88,7 +86,7 @@ def get_news_summary(user_input):
         prompt, summary = get_summary(article['title'], article['summary'])
         result += "\n프롬프트:\n" + prompt + "\n"
         result += "\n요약:\n" + summary + "\n"
-        result += "\n링크: " + article['link'] + "\n"
+        result += "\n> 링크: " + article['link'] + "\n"
         result += "===============\n"
     return result
 
