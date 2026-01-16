@@ -115,7 +115,7 @@ def handle_news_request(user_input, offset):
         response += (
             f"{idx}. [{date_str}] {article.title}\n"
             f"{summary}\n"
-            f"��� {article.link}\n\n"
+            f" {article.link}\n\n"
         )
 
     return response
@@ -140,7 +140,7 @@ def chatbot_response(history, user_input):
 # Streamlit UI
 # ===============================
 st.set_page_config(page_title="AI 챗봇 + 기사 검색", layout="centered")
-st.title("��� AI 챗봇 + ��� 기사 검색")
+st.title(" AI 챗봇 +  기사 검색")
 
 if "history" not in st.session_state:
     st.session_state.history = load_conversation()
