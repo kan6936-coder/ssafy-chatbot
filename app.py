@@ -6,6 +6,8 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from urllib.parse import quote
 from datetime import datetime, timedelta
+import re
+from html.parser import HTMLParser
 
 # ===============================
 # 환경 설정
@@ -21,6 +23,31 @@ client = OpenAI(
 )
 
 MEMORY_FILE = "conversation.json"
+
+# ===============================
+# HTML 태그 제거
+# ===============================
+class HTMLStripper(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.reset()
+        self.strict = False
+        self.convert_charrefs = True
+        self.fed = []
+    
+    def handle_data(self, d):
+        self.fed.append(d)
+    
+    def get_data(self):
+        return ''.join(self.fed)
+
+def strip_html(html):
+    s = HTMLStripper()
+    try:
+        s.feed(html)
+        return s.get_data()
+    except:
+        return html
 
 # ===============================
 # 대화 기록 관리
@@ -42,6 +69,29 @@ def is_news_request(user_input: str) -> bool:
     keywords = ["기사", "뉴스", "보도", "검색"]
     return any(k in user_input for k in keywords)
 
+def extract_article_content(article):
+    """RSS에서 기사 본문 추출"""
+    content = ""
+    
+    # 시도할 필드들 (우선순위 순서)
+    sources = [
+        article.get("content", [{}])[0].get("value", "") if article.get("content") else "",
+        article.get("summary", ""),
+        article.get("description", ""),
+        article.get("summary_detail", {}).get("value", "") if article.get("summary_detail") else "",
+    ]
+    
+    for source in sources:
+        if source and len(source.strip()) > 20:
+            content = strip_html(source)
+            break
+    
+    # 본문이 여전히 짧으면 제목 포함
+    if not content or len(content.strip()) < 30:
+        content = f"{article.get('title', '')}. {content}"
+    
+    return content.strip()
+
 def search_news(query, start=0, size=5):
     encoded_query = quote(query)
     all_articles = []
@@ -52,7 +102,7 @@ def search_news(query, start=0, size=5):
         if feed.entries:
             all_articles.extend(feed.entries[:20])
     except Exception as e:
-        st.error(f"기사 수집 중 오류: {str(e)}")
+        pass
     
     if not all_articles:
         return []
@@ -75,7 +125,7 @@ def search_news(query, start=0, size=5):
             all_articles,
             key=lambda x: x.published_parsed if hasattr(x, 'published_parsed') else datetime.now().timetuple(),
             reverse=True
-        )[:10]
+        )[:15]
     
     seen_titles = set()
     unique_articles = []
@@ -88,21 +138,27 @@ def search_news(query, start=0, size=5):
     return unique_articles[start:start+size]
 
 def summarize_article(text):
-    if not text or len(text.strip()) < 10:
-        return "[기사 본문이 없습니다]"
+    """기사 본문을 3줄로 요약"""
+    if not text or len(text.strip()) < 20:
+        return "기사 본문을 가져올 수 없습니다."
+    
+    # 텍스트 길이 제한
+    text_preview = text[:800]
     
     try:
         res = client.chat.completions.create(
             model="gpt-5-nano",
             messages=[
                 {"role": "system", "content": "너는 뉴스 기사를 정확하게 3줄로 핵심만 요약하는 AI다. 항상 3줄로만 정리해줘."},
-                {"role": "user", "content": f"다음 기사를 3줄로 요약해줘:\n{text[:500]}"}
+                {"role": "user", "content": f"다음 기사를 3줄로 요약해줘:\n{text_preview}"}
             ],
             max_completion_tokens=256,
         )
         return res.choices[0].message.content.strip()
     except Exception as e:
-        return f"[요약 실패: {str(e)[:50]}]"
+        # 요약 실패 시 원본 텍스트의 처음 3줄 반환
+        lines = text_preview.split('\n')[:3]
+        return '\n'.join([line.strip() for line in lines if line.strip()])
 
 def handle_news_request(user_input, offset):
     articles = search_news(user_input, offset)
@@ -126,12 +182,12 @@ def handle_news_request(user_input, offset):
 
     response = ""
     for idx, (pub_date, article) in enumerate(articles_with_date, start=1):
-        article_content = article.get("summary", "") or article.get("title", "")
+        # 기사 본문 추출
+        article_content = extract_article_content(article)
         
-        if not article_content or len(article_content.strip()) < 5:
-            article_content = article.get("title", "제목 없음")
-        
+        # GPT로 3줄 요약
         summary = summarize_article(article_content)
+        
         date_str = pub_date.strftime("%Y.%m.%d %H:%M")
         title = article.get("title", "[제목 없음]")
         link = article.get("link", "[링크 없음]")
