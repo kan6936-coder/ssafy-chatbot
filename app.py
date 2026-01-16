@@ -5,7 +5,7 @@ import streamlit as st
 from openai import OpenAI
 from dotenv import load_dotenv
 from urllib.parse import quote
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ===============================
 # 환경 설정
@@ -44,11 +44,66 @@ def is_news_request(user_input: str) -> bool:
     return any(k in user_input for k in keywords)
 
 def search_news(query, start=0, size=5):
-    """Google News RSS에서 기사 검색"""
+    """여러 소스(Google News, Naver, Daum)에서 기사 검색 - 최신순"""
     encoded_query = quote(query)
-    feed_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=ko&gl=KR&ceid=KR:ko"
-    feed = feedparser.parse(feed_url)
-    return feed.entries[start:start+size]
+    all_articles = []
+    
+    # 1. Google News RSS
+    try:
+        feed_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=ko&gl=KR&ceid=KR:ko"
+        feed = feedparser.parse(feed_url)
+        all_articles.extend(feed.entries[:10])
+    except:
+        pass
+    
+    # 2. Naver News RSS
+    try:
+        feed_url = f"https://search.naver.com/search.naver?where=news&query={encoded_query}&sort=1&ds=&de=&nso=so:r,p:all,a:all"
+        # Naver는 직접 RSS 지원 안 함, 대신 Google News가 Naver 기사 포함함
+    except:
+        pass
+    
+    # 3. Daum News RSS
+    try:
+        feed_url = f"https://news.daum.net/rss/foreign.xml"  # 시험용 RSS
+        feed = feedparser.parse(feed_url)
+        all_articles.extend(feed.entries[:5])
+    except:
+        pass
+    
+    # 날짜 기준 필터링: 어제 + 오늘 기사만
+    today = datetime.now().date()
+    yesterday = today - timedelta(days=1)
+    
+    filtered_articles = []
+    for article in all_articles:
+        try:
+            if hasattr(article, 'published_parsed') and article.published_parsed:
+                article_date = datetime(*article.published_parsed[:6]).date()
+                # 어제나 오늘 기사만
+                if article_date in [yesterday, today]:
+                    filtered_articles.append(article)
+        except:
+            # 날짜 파싱 실패하면 포함
+            filtered_articles.append(article)
+    
+    # 최소 5개 이상 없으면, 필터링 없이 모든 최신 기사 반환
+    if len(filtered_articles) < 3:
+        filtered_articles = sorted(
+            all_articles,
+            key=lambda x: x.published_parsed if hasattr(x, 'published_parsed') else datetime.now().timetuple(),
+            reverse=True
+        )
+    
+    # 중복 제거 (제목 기준)
+    seen_titles = set()
+    unique_articles = []
+    for article in filtered_articles:
+        if article.title not in seen_titles:
+            seen_titles.add(article.title)
+            unique_articles.append(article)
+    
+    return unique_articles[start:start+size]
 
 def summarize_article(text):
     """기사를 3줄로 요약"""
@@ -63,11 +118,11 @@ def summarize_article(text):
     return res.choices[0].message.content.strip()
 
 def handle_news_request(user_input, offset):
-    """기사 검색 요청 처리 (국내 기사만, 최신순)"""
+    """기사 검색 요청 처리 (최신 기사만, 중복 제거)"""
     articles = search_news(user_input, offset)
 
     if not articles:
-        return "검색 결과가 없습니다.\n다른 키워드로 검색해보세요."
+        return "검색 결과가 없습니다.\n다른 키워드로 검색해보세요.\n(최신 기사가 없을 수 있으니 잠시 후 다시 시도해보세요)"
 
     # 날짜 기준으로 정렬 (최신순)
     articles_with_date = []
@@ -86,7 +141,7 @@ def handle_news_request(user_input, offset):
     # 최신순으로 정렬
     articles_with_date.sort(key=lambda x: x[0], reverse=True)
 
-    response = ""
+    response = "🔍 **검색된 최신 기사:**\n\n"
     for idx, (pub_date, article) in enumerate(articles_with_date, start=1):
         summary = summarize_article(article.get("summary", ""))
         response += (
