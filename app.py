@@ -3,7 +3,6 @@ import json
 import streamlit as st
 from openai import OpenAI
 from dotenv import load_dotenv
-from datetime import datetime
 
 # ===============================
 # 환경 설정
@@ -25,13 +24,19 @@ MEMORY_FILE = "conversation.json"
 # ===============================
 def load_conversation():
     if os.path.exists(MEMORY_FILE):
-        with open(MEMORY_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return []
     return []
 
 def save_conversation(history):
-    with open(MEMORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
+    try:
+        with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+    except:
+        pass
 
 # ===============================
 # 기사 검색 기능 (의도 판단 포함)
@@ -48,14 +53,14 @@ def get_news_summary(user_input):
             messages=[
                 {
                     "role": "system",
-                    "content": "너는 최근 뉴스를 정리해서 알려주는 AI다. 사용자가 요청한 주제에 대해 최근 뉴스 3개를 각각 3줄씩 요약해서 보여줘. 형식: [1번 뉴스 제목] 3줄 요약 / [2번 뉴스 제목] 3줄 요약 / [3번 뉴스 제목] 3줄 요약"
+                    "content": "너는 최근 뉴스를 정리해서 알려주는 AI다. 사용자가 요청한 주제에 대해 최근 뉴스 3개를 각각 3줄씩 요약해서 보여줘. 형식: [1번] 제목\n3줄 요약\n\n[2번] 제목\n3줄 요약\n\n[3번] 제목\n3줄 요약"
                 },
                 {
                     "role": "user",
                     "content": f"'{user_input}'에 대한 최근 뉴스 3개를 각각 3줄로 요약해줄 수 있어?"
                 }
             ],
-            max_completion_tokens=512,
+            max_completion_tokens=1024,
         )
         return res.choices[0].message.content.strip()
     except Exception as e:
@@ -66,16 +71,18 @@ def get_news_summary(user_input):
 # ===============================
 def chatbot_response(history, user_input):
     """일반 챗봇 응답 생성 (문맥 유지)"""
-    messages = [{"role": "system", "content": "너는 일반적인 인공지능 챗봇이다."}]
-    for h in history:
+    messages = [{"role": "system", "content": "너는 일반적인 인공지능 챗봇이다. 한국어로 자연스럽게 답변해."}]
+    
+    for h in history[-10:]:
         messages.append({"role": h["role"], "content": h["content"]})
+    
     messages.append({"role": "user", "content": user_input})
 
     try:
         res = client.chat.completions.create(
             model="gpt-5-nano",
             messages=messages,
-            max_completion_tokens=512,
+            max_completion_tokens=1024,
         )
         return res.choices[0].message.content.strip()
     except Exception as e:
@@ -85,7 +92,7 @@ def chatbot_response(history, user_input):
 # Streamlit UI
 # ===============================
 st.set_page_config(page_title="AI 챗봇 + 기사 검색", layout="centered")
-st.title(" AI 챗봇 +  기사 검색")
+st.title("��� AI 챗봇 + ��� 기사 검색")
 
 if "history" not in st.session_state:
     st.session_state.history = load_conversation()
