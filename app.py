@@ -89,9 +89,8 @@ def handle_news_request(user_input, offset):
     response = ""
     for idx, (pub_date, article) in enumerate(articles_with_date, start=1):
         summary = summarize_article(article.get("summary", ""))
-        date_str = pub_date.strftime("%Y-%m-%d %H:%M")
         response += (
-            f"{idx}. [{date_str}] {article.title}\n"
+            f"{idx}. {article.title}\n"
             f"{summary}\n"
             f"🔗 {article.link}\n\n"
         )
