@@ -46,14 +46,13 @@ def is_news_request(user_input: str) -> bool:
     return any(k in user_input for k in keywords)
 
 def get_news_summary(user_input):
-    """GPT에게 직접 기사 내용 요약 요청"""
     try:
         res = client.chat.completions.create(
             model="gpt-5-nano",
             messages=[
                 {
                     "role": "system",
-                    "content": "너는 최근 뉴스를 정리해서 알려주는 AI다. 사용자가 요청한 주제에 대해 최근 뉴스 3개를 각각 3줄씩 요약해서 보여줘. 형식: [1번] 제목\n3줄 요약\n\n[2번] 제목\n3줄 요약\n\n[3번] 제목\n3줄 요약"
+                    "content": "너는 최근 뉴스를 정리해서 알려주는 AI다. 사용자가 요청한 주제에 대해 최근 뉴스 3개를 각각 3줄씩 요약해서 보여줘."
                 },
                 {
                     "role": "user",
@@ -64,14 +63,13 @@ def get_news_summary(user_input):
         )
         return res.choices[0].message.content.strip()
     except Exception as e:
-        return f"기사 검색 중 오류가 발생했습니다: {str(e)}"
+        return f"오류: {str(e)}"
 
 # ===============================
 # 기본 챗봇 기능
 # ===============================
 def chatbot_response(history, user_input):
-    """일반 챗봇 응답 생성 (문맥 유지)"""
-    messages = [{"role": "system", "content": "너는 일반적인 인공지능 챗봇이다. 한국어로 자연스럽게 답변해."}]
+    messages = [{"role": "system", "content": "너는 일반적인 인공지능 챗봇이다."}]
     
     for h in history[-10:]:
         messages.append({"role": h["role"], "content": h["content"]})
@@ -86,29 +84,26 @@ def chatbot_response(history, user_input):
         )
         return res.choices[0].message.content.strip()
     except Exception as e:
-        return f"응답 생성 중 오류가 발생했습니다: {str(e)}"
+        return f"오류: {str(e)}"
 
 # ===============================
 # Streamlit UI
 # ===============================
 st.set_page_config(page_title="AI 챗봇 + 기사 검색", layout="centered")
-st.title("��� AI 챗봇 + ��� 기사 검색")
+st.title("AI 챗봇 + 기사 검색")
 
 if "history" not in st.session_state:
     st.session_state.history = load_conversation()
 
-# 이전 대화 출력
 for h in st.session_state.history:
     st.chat_message(h["role"]).write(h["content"])
 
-# 입력창
 user_input = st.chat_input("메시지를 입력하세요")
 
 if user_input:
     st.chat_message("user").write(user_input)
     st.session_state.history.append({"role": "user", "content": user_input})
 
-    # 기사 검색 의도 판단
     if is_news_request(user_input):
         response = get_news_summary(user_input)
     else:
@@ -117,5 +112,4 @@ if user_input:
     st.chat_message("assistant").write(response)
     st.session_state.history.append({"role": "assistant", "content": response})
 
-    # 로컬 파일에 대화 저장
     save_conversation(st.session_state.history)
