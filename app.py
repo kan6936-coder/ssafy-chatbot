@@ -2,26 +2,19 @@ import os
 import json
 import streamlit as st
 from openai import OpenAI
-from dotenv import load_dotenv
 
-# ===============================
-# 환경 설정
-# ===============================
-load_dotenv()
+MEMORY_FILE = "conversation.json"
+API_KEY = os.environ.get("OPENAI_API_KEY")
 
-if not os.environ.get("OPENAI_API_KEY"):
-    st.error("OPENAI_API_KEY 환경 변수가 설정되지 않았습니다.")
+if not API_KEY:
+    st.error("OPENAI_API_KEY 환경변수 설정 필요")
     st.stop()
 
 client = OpenAI(
-    base_url="https://gms.ssafy.io/gmsapi/api.openai.com/v1"
+    base_url="https://gms.ssafy.io/gmsapi/api.openai.com/v1",
+    api_key=API_KEY
 )
 
-MEMORY_FILE = "conversation.json"
-
-# ===============================
-# 대화 기록 관리
-# ===============================
 def load_conversation():
     if os.path.exists(MEMORY_FILE):
         try:
@@ -38,9 +31,6 @@ def save_conversation(history):
     except:
         pass
 
-# ===============================
-# 기사 검색 기능 (의도 판단 포함)
-# ===============================
 def is_news_request(user_input: str) -> bool:
     keywords = ["기사", "뉴스", "보도", "검색", "뉴스해줄", "기사해줄"]
     return any(k in user_input for k in keywords)
@@ -50,30 +40,19 @@ def get_news_summary(user_input):
         res = client.chat.completions.create(
             model="gpt-5-nano",
             messages=[
-                {
-                    "role": "system",
-                    "content": "너는 최근 뉴스를 정리해서 알려주는 AI다. 사용자가 요청한 주제에 대해 최근 뉴스 3개를 각각 3줄씩 요약해서 보여줘."
-                },
-                {
-                    "role": "user",
-                    "content": f"'{user_input}'에 대한 최근 뉴스 3개를 각각 3줄로 요약해줄 수 있어?"
-                }
+                {"role": "system", "content": "너는 최근 뉴스를 정리하는 AI다. 사용자가 요청한 주제의 최근 뉴스 3개를 각각 3줄씩 요약해줘."},
+                {"role": "user", "content": f"{user_input}에 대한 최근 뉴스 3개"}
             ],
             max_completion_tokens=1024,
         )
         return res.choices[0].message.content.strip()
     except Exception as e:
-        return f"오류: {str(e)}"
+        return f"기사 검색 오류: {str(e)}"
 
-# ===============================
-# 기본 챗봇 기능
-# ===============================
 def chatbot_response(history, user_input):
-    messages = [{"role": "system", "content": "너는 일반적인 인공지능 챗봇이다."}]
-    
+    messages = [{"role": "system", "content": "너는 친절한 AI 챗봇이다."}]
     for h in history[-10:]:
         messages.append({"role": h["role"], "content": h["content"]})
-    
     messages.append({"role": "user", "content": user_input})
 
     try:
@@ -84,12 +63,9 @@ def chatbot_response(history, user_input):
         )
         return res.choices[0].message.content.strip()
     except Exception as e:
-        return f"오류: {str(e)}"
+        return f"응답 오류: {str(e)}"
 
-# ===============================
-# Streamlit UI
-# ===============================
-st.set_page_config(page_title="AI 챗봇 + 기사 검색", layout="centered")
+st.set_page_config(page_title="AI 챗봇", layout="centered")
 st.title("AI 챗봇 + 기사 검색")
 
 if "history" not in st.session_state:
@@ -98,18 +74,18 @@ if "history" not in st.session_state:
 for h in st.session_state.history:
     st.chat_message(h["role"]).write(h["content"])
 
-user_input = st.chat_input("메시지를 입력하세요")
+user_input = st.chat_input("메시지 입력")
 
 if user_input:
     st.chat_message("user").write(user_input)
     st.session_state.history.append({"role": "user", "content": user_input})
-
-    if is_news_request(user_input):
-        response = get_news_summary(user_input)
-    else:
-        response = chatbot_response(st.session_state.history, user_input)
-
+    
+    with st.spinner("처리 중..."):
+        if is_news_request(user_input):
+            response = get_news_summary(user_input)
+        else:
+            response = chatbot_response(st.session_state.history, user_input)
+    
     st.chat_message("assistant").write(response)
     st.session_state.history.append({"role": "assistant", "content": response})
-
     save_conversation(st.session_state.history)
