@@ -53,11 +53,7 @@ def search_news(query):
 
 def get_summary(title, text):
     try:
-        prompt = f"제목: {title}
-
-본문: {text}
-
-위 기사를 3줄로 요약해줘"
+        prompt = "제목: " + title + "\n\n본문: " + text + "\n\n위 기사를 3줄로 요약해줘"
         res = client.chat.completions.create(
             model="gpt-5-nano",
             messages=[{"role": "user", "content": prompt}],
@@ -65,7 +61,7 @@ def get_summary(title, text):
         )
         return prompt, res.choices[0].message.content.strip()
     except Exception as e:
-        return "", f"오류: {str(e)}"
+        return "", "오류: " + str(e)
 
 def get_news_summary(user_input):
     articles = search_news(user_input)
@@ -74,13 +70,13 @@ def get_news_summary(user_input):
     
     result = ""
     for i, article in enumerate(articles, 1):
-        result += f"\n기사 {i}: {article['title']}\n"
-        result += f"본문: {article['summary']}\n"
+        result += "\n기사 " + str(i) + ": " + article['title'] + "\n"
+        result += "본문: " + article['summary'] + "\n"
         prompt, summary = get_summary(article['title'], article['summary'])
-        result += f"\n프롬프트:\n{prompt}\n"
-        result += f"\n요약:\n{summary}\n"
-        result += f"\n링크: {article['link']}\n"
-        result += "━━━━━━━━━━━━━━━━\n"
+        result += "\n프롬프트:\n" + prompt + "\n"
+        result += "\n요약:\n" + summary + "\n"
+        result += "\n링크: " + article['link'] + "\n"
+        result += "===============\n"
     return result
 
 def chatbot_response(history, user_input):
@@ -96,7 +92,7 @@ def chatbot_response(history, user_input):
         )
         return res.choices[0].message.content.strip()
     except Exception as e:
-        return f"오류: {str(e)}"
+        return "오류: " + str(e)
 
 st.set_page_config(page_title="AI 챗봇", layout="wide")
 st.title("AI 챗봇 + 기사 검색")
