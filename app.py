@@ -4,6 +4,7 @@ import feedparser
 import streamlit as st
 from openai import OpenAI
 from dotenv import load_dotenv
+from urllib.parse import quote
 
 # ===============================
 # 환경 설정
@@ -43,7 +44,8 @@ def is_news_request(user_input: str) -> bool:
 
 def search_news(query, start=0, size=5):
     """Google News RSS에서 기사 검색"""
-    feed_url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
+    encoded_query = quote(query)
+    feed_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=ko&gl=KR&ceid=KR:ko"
     feed = feedparser.parse(feed_url)
     return feed.entries[start:start+size]
 
