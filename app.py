@@ -45,15 +45,21 @@ def is_news_request(user_input: str) -> bool:
 def search_news(query, start=0, size=5):
     encoded_query = quote(query)
     all_articles = []
+    
     try:
         feed_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=ko&gl=KR&ceid=KR:ko"
         feed = feedparser.parse(feed_url)
-        all_articles.extend(feed.entries[:15])
-    except:
-        pass
+        if feed.entries:
+            all_articles.extend(feed.entries[:20])
+    except Exception as e:
+        st.error(f"기사 수집 중 오류: {str(e)}")
+    
+    if not all_articles:
+        return []
     
     today = datetime.now().date()
     yesterday = today - timedelta(days=1)
+    
     filtered_articles = []
     for article in all_articles:
         try:
@@ -64,28 +70,39 @@ def search_news(query, start=0, size=5):
         except:
             filtered_articles.append(article)
     
-    if len(filtered_articles) < 3:
-        filtered_articles = sorted(all_articles, key=lambda x: x.published_parsed if hasattr(x, 'published_parsed') else datetime.now().timetuple(), reverse=True)
+    if len(filtered_articles) < 2:
+        filtered_articles = sorted(
+            all_articles,
+            key=lambda x: x.published_parsed if hasattr(x, 'published_parsed') else datetime.now().timetuple(),
+            reverse=True
+        )[:10]
     
     seen_titles = set()
     unique_articles = []
     for article in filtered_articles:
-        if article.title not in seen_titles:
-            seen_titles.add(article.title)
+        title = article.get("title", "제목 없음")
+        if title not in seen_titles:
+            seen_titles.add(title)
             unique_articles.append(article)
     
     return unique_articles[start:start+size]
 
 def summarize_article(text):
-    res = client.chat.completions.create(
-        model="gpt-5-nano",
-        messages=[
-            {"role": "system", "content": "너는 뉴스 기사를 정확하게 3줄로 핵심만 요약하는 AI다. 항상 3줄로만 정리해줘."},
-            {"role": "user", "content": f"다음 기사를 3줄로 요약해줘:\n{text}"}
-        ],
-        max_completion_tokens=256,
-    )
-    return res.choices[0].message.content.strip()
+    if not text or len(text.strip()) < 10:
+        return "[기사 본문이 없습니다]"
+    
+    try:
+        res = client.chat.completions.create(
+            model="gpt-5-nano",
+            messages=[
+                {"role": "system", "content": "너는 뉴스 기사를 정확하게 3줄로 핵심만 요약하는 AI다. 항상 3줄로만 정리해줘."},
+                {"role": "user", "content": f"다음 기사를 3줄로 요약해줘:\n{text[:500]}"}
+            ],
+            max_completion_tokens=256,
+        )
+        return res.choices[0].message.content.strip()
+    except Exception as e:
+        return f"[요약 실패: {str(e)[:50]}]"
 
 def handle_news_request(user_input, offset):
     articles = search_news(user_input, offset)
@@ -110,12 +127,19 @@ def handle_news_request(user_input, offset):
     response = ""
     for idx, (pub_date, article) in enumerate(articles_with_date, start=1):
         article_content = article.get("summary", "") or article.get("title", "")
+        
+        if not article_content or len(article_content.strip()) < 5:
+            article_content = article.get("title", "제목 없음")
+        
         summary = summarize_article(article_content)
         date_str = pub_date.strftime("%Y.%m.%d %H:%M")
+        title = article.get("title", "[제목 없음]")
+        link = article.get("link", "[링크 없음]")
+        
         response += (
-            f"{idx}. [{date_str}] {article.title}\n"
+            f"{idx}. [{date_str}] {title}\n"
             f"{summary}\n"
-            f" {article.link}\n\n"
+            f"��� {link}\n\n"
         )
 
     return response
@@ -129,18 +153,21 @@ def chatbot_response(history, user_input):
         messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": user_input})
 
-    res = client.chat.completions.create(
-        model="gpt-5-nano",
-        messages=messages,
-        max_completion_tokens=512,
-    )
-    return res.choices[0].message.content.strip()
+    try:
+        res = client.chat.completions.create(
+            model="gpt-5-nano",
+            messages=messages,
+            max_completion_tokens=512,
+        )
+        return res.choices[0].message.content.strip()
+    except Exception as e:
+        return f"응답 생성 중 오류가 발생했습니다: {str(e)}"
 
 # ===============================
 # Streamlit UI
 # ===============================
 st.set_page_config(page_title="AI 챗봇 + 기사 검색", layout="centered")
-st.title(" AI 챗봇 +  기사 검색")
+st.title("��� AI 챗봇 + ��� 기사 검색")
 
 if "history" not in st.session_state:
     st.session_state.history = load_conversation()
